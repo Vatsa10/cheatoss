@@ -1,13 +1,4 @@
-<img src="/src/assets/logo.png" alt="uwu" width="200"/>
-
 # Cheatoss
-
-> [!NOTE]  
-> Use latest MacOS and Windows version, older versions have limited support
-
-> [!NOTE]  
-> During testing it wont answer if you ask something, you need to simulate interviewer asking question, which it will answer
-
 A real-time AI assistant that provides contextual help during video calls, interviews, presentations, and meetings using screen capture and audio analysis.
 
 ## Features
