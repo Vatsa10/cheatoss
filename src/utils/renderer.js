@@ -23,13 +23,58 @@ let audioProcessor = null;
 let micAudioProcessor = null;
 let audioBuffer = [];
 const SAMPLE_RATE = 24000;
-const AUDIO_CHUNK_DURATION = 0.1; // seconds
-const BUFFER_SIZE = 4096; // Increased buffer size for smoother audio
+const AUDIO_CHUNK_DURATION = 0.05; // seconds - reduced for lower latency
+const BUFFER_SIZE = 8192; // Increased buffer size for smoother audio
+
+// Web Worker for parallel audio processing
+let audioWorker = null;
+let chunkIdCounter = 0;
+const pendingChunks = new Map();
 
 let hiddenVideo = null;
 let offscreenCanvas = null;
 let offscreenContext = null;
 let currentImageQuality = 'medium'; // Store current image quality for manual screenshots
+
+// Initialize Web Worker for audio processing
+function initializeAudioWorker() {
+    try {
+        audioWorker = new Worker('./workers/audioWorker.js');
+        
+        audioWorker.onmessage = function(e) {
+            const { success, chunkId, base64Data, error, compressionRatio } = e.data;
+            
+            if (success) {
+                // Send processed audio to main process
+                ipcRenderer.invoke('send-audio-content', {
+                    data: base64Data,
+                    mimeType: 'audio/pcm;rate=24000',
+                });
+                
+                // Log compression stats
+                if (compressionRatio < 1) {
+                    console.log(`Audio chunk ${chunkId} compressed: ${(compressionRatio * 100).toFixed(1)}%`);
+                }
+            } else {
+                console.error(`Audio processing error for chunk ${chunkId}:`, error);
+            }
+            
+            // Remove from pending chunks
+            pendingChunks.delete(chunkId);
+        };
+        
+        audioWorker.onerror = function(error) {
+            console.error('Audio Worker error:', error);
+            // Fallback to synchronous processing
+            audioWorker = null;
+        };
+        
+        console.log('Audio Worker initialized successfully');
+    } catch (error) {
+        console.error('Failed to initialize Audio Worker:', error);
+        audioWorker = null;
+    }
+}
 
 const isLinux = process.platform === 'linux';
 const isMacOS = process.platform === 'darwin';
@@ -181,6 +226,11 @@ async function startCapture(screenshotIntervalSeconds = 5, imageQuality = 'mediu
     // Reset token tracker when starting new capture session
     tokenTracker.reset();
     console.log('🎯 Token tracker reset for new capture session');
+
+    // Initialize Web Worker for parallel audio processing
+    if (!audioWorker) {
+        initializeAudioWorker();
+    }
 
     const audioMode = localStorage.getItem('audioMode') || 'speaker_only';
 
@@ -371,13 +421,26 @@ function setupLinuxMicProcessing(micStream) {
         // Process audio in chunks
         while (audioBuffer.length >= samplesPerChunk) {
             const chunk = audioBuffer.splice(0, samplesPerChunk);
-            const pcmData16 = convertFloat32ToInt16(chunk);
-            const base64Data = arrayBufferToBase64(pcmData16.buffer);
+            const chunkId = ++chunkIdCounter;
 
-            await ipcRenderer.invoke('send-mic-audio-content', {
-                data: base64Data,
-                mimeType: 'audio/pcm;rate=24000',
-            });
+            if (audioWorker) {
+                // Use Web Worker for parallel processing
+                pendingChunks.set(chunkId, true);
+                audioWorker.postMessage({
+                    audioChunk: chunk,
+                    chunkId,
+                    enableCompression: true
+                });
+            } else {
+                // Fallback to synchronous processing
+                const pcmData16 = convertFloat32ToInt16(chunk);
+                const base64Data = arrayBufferToBase64(pcmData16.buffer);
+
+                await ipcRenderer.invoke('send-mic-audio-content', {
+                    data: base64Data,
+                    mimeType: 'audio/pcm;rate=24000',
+                });
+            }
         }
     };
 
@@ -404,13 +467,26 @@ function setupLinuxSystemAudioProcessing() {
         // Process audio in chunks
         while (audioBuffer.length >= samplesPerChunk) {
             const chunk = audioBuffer.splice(0, samplesPerChunk);
-            const pcmData16 = convertFloat32ToInt16(chunk);
-            const base64Data = arrayBufferToBase64(pcmData16.buffer);
+            const chunkId = ++chunkIdCounter;
 
-            await ipcRenderer.invoke('send-audio-content', {
-                data: base64Data,
-                mimeType: 'audio/pcm;rate=24000',
-            });
+            if (audioWorker) {
+                // Use Web Worker for parallel processing
+                pendingChunks.set(chunkId, true);
+                audioWorker.postMessage({
+                    audioChunk: chunk,
+                    chunkId,
+                    enableCompression: true
+                });
+            } else {
+                // Fallback to synchronous processing
+                const pcmData16 = convertFloat32ToInt16(chunk);
+                const base64Data = arrayBufferToBase64(pcmData16.buffer);
+
+                await ipcRenderer.invoke('send-audio-content', {
+                    data: base64Data,
+                    mimeType: 'audio/pcm;rate=24000',
+                });
+            }
         }
     };
 
@@ -434,13 +510,26 @@ function setupWindowsLoopbackProcessing() {
         // Process audio in chunks
         while (audioBuffer.length >= samplesPerChunk) {
             const chunk = audioBuffer.splice(0, samplesPerChunk);
-            const pcmData16 = convertFloat32ToInt16(chunk);
-            const base64Data = arrayBufferToBase64(pcmData16.buffer);
+            const chunkId = ++chunkIdCounter;
 
-            await ipcRenderer.invoke('send-audio-content', {
-                data: base64Data,
-                mimeType: 'audio/pcm;rate=24000',
-            });
+            if (audioWorker) {
+                // Use Web Worker for parallel processing
+                pendingChunks.set(chunkId, true);
+                audioWorker.postMessage({
+                    audioChunk: chunk,
+                    chunkId,
+                    enableCompression: true
+                });
+            } else {
+                // Fallback to synchronous processing
+                const pcmData16 = convertFloat32ToInt16(chunk);
+                const base64Data = arrayBufferToBase64(pcmData16.buffer);
+
+                await ipcRenderer.invoke('send-audio-content', {
+                    data: base64Data,
+                    mimeType: 'audio/pcm;rate=24000',
+                });
+            }
         }
     };
 
@@ -579,6 +668,14 @@ function stopCapture() {
     if (micAudioProcessor) {
         micAudioProcessor.disconnect();
         micAudioProcessor = null;
+    }
+
+    // Clean up Web Worker
+    if (audioWorker) {
+        audioWorker.terminate();
+        audioWorker = null;
+        pendingChunks.clear();
+        chunkIdCounter = 0;
     }
 
     if (audioContext) {

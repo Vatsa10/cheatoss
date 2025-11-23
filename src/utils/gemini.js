@@ -344,6 +344,12 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
                 systemInstruction: {
                     parts: [{ text: systemPrompt }],
                 },
+                // Low latency optimizations
+                generationConfig: {
+                    maxOutputTokens: 150, // Shorter responses for faster delivery
+                    temperature: 0.1, // More deterministic responses
+                    topP: 0.8,
+                },
             },
         });
 
@@ -435,11 +441,14 @@ async function startMacOSAudioCapture(geminiSessionRef) {
 
     console.log('SystemAudioDump started with PID:', systemAudioProc.pid);
 
-    const CHUNK_DURATION = 0.1;
+    const CHUNK_DURATION = 0.05;
     const SAMPLE_RATE = 24000;
     const BYTES_PER_SAMPLE = 2;
     const CHANNELS = 2;
     const CHUNK_SIZE = SAMPLE_RATE * BYTES_PER_SAMPLE * CHANNELS * CHUNK_DURATION;
+    
+    // Smaller buffer for lower latency
+    const maxBufferSize = SAMPLE_RATE * BYTES_PER_SAMPLE * 0.5;
 
     let audioBuffer = Buffer.alloc(0);
 
@@ -460,7 +469,6 @@ async function startMacOSAudioCapture(geminiSessionRef) {
             }
         }
 
-        const maxBufferSize = SAMPLE_RATE * BYTES_PER_SAMPLE * 1;
         if (audioBuffer.length > maxBufferSize) {
             audioBuffer = audioBuffer.slice(-maxBufferSize);
         }
