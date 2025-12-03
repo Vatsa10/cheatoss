@@ -5,10 +5,12 @@ A real-time AI assistant that provides contextual help during video calls, inter
 
 - **Live AI Assistance**: Real-time help powered by Google Gemini 2.0 Flash Live
 - **Screen & Audio Capture**: Analyzes what you see and hear for contextual responses
+- **OCR Screenshot Capture**: Select any screen area for real-time text extraction and AI analysis
+- **Multiple Session Types**: Audio session for live conversation, OCR session for screenshot-based analysis
 - **Multiple Profiles**: Interview, Sales Call, Business Meeting, Presentation, Negotiation
 - **Transparent Overlay**: Always-on-top window that can be positioned anywhere
 - **Click-through Mode**: Make window transparent to clicks when needed
-- **Cross-platform**: Works on macOS, Windows, and Linux (kinda, dont use, just for testing rn)
+- **Cross-platform**: Works on macOS, Windows, and Linux (experimental)
 
 ## Setup
 
@@ -18,11 +20,23 @@ A real-time AI assistant that provides contextual help during video calls, inter
 
 ## Usage
 
+### Audio Sessions
 1. Enter your Gemini API key in the main window
 2. Choose your profile and language in settings
-3. Click "Start Session" to begin
-4. Position the window using keyboard shortcuts
-5. The AI will provide real-time assistance based on your screen and what interview asks
+3. Select "🎤 Audio Session" and click "Start Session"
+4. The AI will provide real-time assistance based on your screen and audio
+
+### OCR Screenshot Sessions
+1. Enter your Gemini API key in the main window
+2. Select "📸 Screenshot OCR" and click "Start Session"
+3. Click "📸 CAPTURE SCREENSHOT" to open the selection tool
+4. Click and drag to select any area on your screen
+5. The OCR extracts text and sends it to Gemini for analysis
+6. Get contextual AI responses based on the captured content
+
+### Window Controls
+- Position the window using keyboard shortcuts
+- Use click-through mode when needed
 
 ## Keyboard Shortcuts
 
@@ -31,9 +45,17 @@ A real-time AI assistant that provides contextual help during video calls, inter
 - **Close/Back**: `Ctrl/Cmd + \` - Close window or go back
 - **Send Message**: `Enter` - Send text to AI
 
+## OCR Features
+
+- **Region Selection**: Capture specific areas instead of full screen
+- **Real-time Text Extraction**: Uses Tesseract.js for accurate OCR
+- **Contextual AI Analysis**: Extracted text is sent to Gemini for relevant responses
+- **Visual Feedback**: Red selection border shows capture area
+- **Cancel Option**: Press ESC to cancel selection
+
 ## Audio Capture
 
-- **macOS**: [SystemAudioDump](https://github.com/Mohammed-Yasin-Mulla/Sound) for system audio
+- **macOS**: SystemAudioDump for system audio capture
 - **Windows**: Loopback audio capture
 - **Linux**: Microphone input
 
@@ -43,3 +65,12 @@ A real-time AI assistant that provides contextual help during video calls, inter
 - Gemini API key
 - Screen recording permissions
 - Microphone/audio permissions
+- Tesseract.js (automatically installed for OCR)
+
+## Technical Stack
+
+- **Framework**: Electron
+- **AI Engine**: Google Gemini 2.0 Flash Live API
+- **OCR**: Tesseract.js for text extraction
+- **Image Processing**: Jimp for screenshot optimization
+- **UI**: LitElement components with shadcn/ui styling
