@@ -1,4 +1,4 @@
-const { desktopCapturer, ipcMain } = require('electron');
+const { desktopCapturer, ipcMain, BrowserWindow, screen } = require('electron');
 const Jimp = require('jimp');
 const fs = require('fs');
 const path = require('path');
@@ -8,6 +8,7 @@ let screenshotInterval = null;
 let isCapturing = false;
 let tempDir = null;
 let ocrWorker = null;
+let selectionWindow = null;
 
 async function initializeOCR() {
     try {
@@ -54,6 +55,230 @@ async function cleanupOCR() {
         console.log('OCR cleanup completed');
     } catch (error) {
         console.error('Error during OCR cleanup:', error);
+    }
+}
+
+// Snipping tool functions
+async function createSelectionWindow() {
+    try {
+        const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+        
+        selectionWindow = new BrowserWindow({
+            width: width,
+            height: height,
+            x: 0,
+            y: 0,
+            frame: false,
+            transparent: true,
+            alwaysOnTop: true,
+            skipTaskbar: true,
+            resizable: false,
+            movable: false,
+            webPreferences: {
+                nodeIntegration: true,
+                contextIsolation: false
+            }
+        });
+
+        // Load the selection overlay HTML
+        selectionWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body {
+                        margin: 0;
+                        padding: 0;
+                        background: rgba(0, 0, 0, 0.3);
+                        overflow: hidden;
+                        cursor: crosshair;
+                        user-select: none;
+                    }
+                    #selection {
+                        position: absolute;
+                        border: 2px dashed #ff0000;
+                        background: rgba(255, 255, 255, 0.1);
+                        pointer-events: none;
+                    }
+                    .info {
+                        position: fixed;
+                        top: 10px;
+                        left: 50%;
+                        transform: translateX(-50%);
+                        background: rgba(0, 0, 0, 0.8);
+                        color: white;
+                        padding: 10px 20px;
+                        border-radius: 5px;
+                        font-family: Arial, sans-serif;
+                        font-size: 14px;
+                        z-index: 1000;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="info">Click and drag to select area to capture</div>
+                <div id="selection"></div>
+                <script>
+                    let isSelecting = false;
+                    let startX, startY, endX, endY;
+                    const selection = document.getElementById('selection');
+                    const info = document.querySelector('.info');
+
+                    document.addEventListener('mousedown', (e) => {
+                        isSelecting = true;
+                        startX = e.clientX;
+                        startY = e.clientY;
+                        selection.style.left = startX + 'px';
+                        selection.style.top = startY + 'px';
+                        selection.style.width = '0px';
+                        selection.style.height = '0px';
+                        selection.style.display = 'block';
+                        info.style.display = 'none';
+                    });
+
+                    document.addEventListener('mousemove', (e) => {
+                        if (!isSelecting) return;
+                        
+                        endX = e.clientX;
+                        endY = e.clientY;
+                        
+                        const left = Math.min(startX, endX);
+                        const top = Math.min(startY, endY);
+                        const width = Math.abs(endX - startX);
+                        const height = Math.abs(endY - startY);
+                        
+                        selection.style.left = left + 'px';
+                        selection.style.top = top + 'px';
+                        selection.style.width = width + 'px';
+                        selection.style.height = height + 'px';
+                    });
+
+                    document.addEventListener('mouseup', (e) => {
+                        if (!isSelecting) return;
+                        isSelecting = false;
+                        
+                        const left = Math.min(startX, endX);
+                        const top = Math.min(startY, endY);
+                        const width = Math.abs(endX - startX);
+                        const height = Math.abs(endY - startY);
+                        
+                        // Send selection to main process
+                        window.electronAPI.sendSelection({ left, top, width, height });
+                        
+                        // Close selection window
+                        window.close();
+                    });
+
+                    // Cancel on Escape
+                    document.addEventListener('keydown', (e) => {
+                        if (e.key === 'Escape') {
+                            window.electronAPI.cancelSelection();
+                            window.close();
+                        }
+                    });
+                </script>
+            </body>
+            </html>
+        `));
+
+        // Set up communication with selection window
+        selectionWindow.webContents.executeJavaScript(`
+            window.electronAPI = {
+                sendSelection: (selection) => {
+                    require('electron').ipcRenderer.send('selection-complete', selection);
+                },
+                cancelSelection: () => {
+                    require('electron').ipcRenderer.send('selection-cancelled');
+                }
+            };
+        `);
+
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                reject(new Error('Selection timeout'));
+            }, 30000); // 30 second timeout
+
+            const handleSelection = (event, selection) => {
+                clearTimeout(timeout);
+                cleanupSelectionWindow();
+                resolve(selection);
+            };
+
+            const handleCancel = () => {
+                clearTimeout(timeout);
+                cleanupSelectionWindow();
+                reject(new Error('Selection cancelled'));
+            };
+
+            ipcMain.once('selection-complete', handleSelection);
+            ipcMain.once('selection-cancelled', handleCancel);
+
+            selectionWindow.on('closed', () => {
+                clearTimeout(timeout);
+                ipcMain.removeListener('selection-complete', handleSelection);
+                ipcMain.removeListener('selection-cancelled', handleCancel);
+                selectionWindow = null;
+            });
+        });
+
+    } catch (error) {
+        console.error('Error creating selection window:', error);
+        cleanupSelectionWindow();
+        throw error;
+    }
+}
+
+function cleanupSelectionWindow() {
+    if (selectionWindow && !selectionWindow.isDestroyed()) {
+        selectionWindow.close();
+        selectionWindow = null;
+    }
+}
+
+async function captureSelectedArea(selection) {
+    try {
+        console.log('Capturing selected area:', selection);
+        
+        // Capture full screen first
+        const sources = await desktopCapturer.getSources({
+            types: ['screen'],
+            thumbnailSize: screen.getPrimaryDisplay().workAreaSize
+        });
+
+        if (sources.length === 0) {
+            throw new Error('No screen sources found');
+        }
+
+        const screenSource = sources[0];
+        const fullImage = screenSource.thumbnail;
+        
+        // Crop to selected area
+        const croppedImage = fullImage.crop({
+            x: selection.left,
+            y: selection.top,
+            width: selection.width,
+            height: selection.height
+        });
+
+        // Convert to buffer
+        const buffer = croppedImage.toPNG();
+        
+        // Process with Jimp for OCR optimization
+        const processedImage = await Jimp.read(buffer);
+        processedImage
+            .greyscale()
+            .contrast(0.3)
+            .normalize();
+
+        const processedBuffer = await processedImage.getBufferAsync(Jimp.MIME_JPEG);
+        
+        return {
+            buffer: processedBuffer,
+            base64: processedBuffer.toString('base64')
+        };
+    } catch (error) {
+        console.error('Error capturing selected area:', error);
+        throw error;
     }
 }
 
@@ -240,18 +465,24 @@ function setupScreenshotIpcHandlers(geminiSessionRef, sendToRenderer) {
     ipcMain.handle('capture-single-screenshot', async (event) => {
         try {
             // Initialize OCR if not already done
-            if (!tempDir) {
+            if (!ocrWorker) {
                 const initialized = await initializeOCR();
                 if (!initialized) {
                     return { success: false, error: 'Failed to initialize OCR' };
                 }
             }
 
-            sendToRenderer('update-status', 'Capturing screen...');
-            const { buffer, base64 } = await captureScreen();
+            sendToRenderer('update-status', 'Select area to capture...');
+            
+            // Show selection overlay
+            const selection = await createSelectionWindow();
+            
+            sendToRenderer('update-status', 'Capturing selected area...');
+            const { buffer, base64 } = await captureSelectedArea(selection);
+            
             sendToRenderer('update-status', 'Processing screenshot...');
             const extractedText = await performSimpleOCR(buffer);
-            console.log('Extracted OCR text:', extractedText); // Debug log
+            console.log('Extracted OCR text:', extractedText);
             
             // Send extracted text to Gemini for processing
             if (extractedText && extractedText.trim()) {
@@ -259,9 +490,6 @@ function setupScreenshotIpcHandlers(geminiSessionRef, sendToRenderer) {
                 
                 // Use the existing IPC handler to send text to Gemini
                 try {
-                    // Get the main process to send the text message
-                    const { ipcMain } = require('electron');
-                    
                     // Send the extracted text as a message to the active Gemini session
                     if (global.geminiSessionRef && global.geminiSessionRef.current) {
                         await global.geminiSessionRef.current.sendRealtimeInput({
@@ -277,7 +505,7 @@ function setupScreenshotIpcHandlers(geminiSessionRef, sendToRenderer) {
                     sendToRenderer('update-status', 'Failed to send to Gemini');
                 }
             } else {
-                sendToRenderer('update-status', 'No text found in screenshot');
+                sendToRenderer('update-status', 'No text found in selected area');
             }
             
             return { 
@@ -287,6 +515,7 @@ function setupScreenshotIpcHandlers(geminiSessionRef, sendToRenderer) {
             };
         } catch (error) {
             console.error('Error capturing single screenshot:', error);
+            cleanupSelectionWindow();
             return { success: false, error: error.message };
         }
     });
@@ -306,6 +535,8 @@ module.exports = {
     initializeOCR,
     cleanupOCR,
     captureScreen,
+    captureSelectedArea,
+    createSelectionWindow,
     performSimpleOCR,
     startScreenshotCapture,
     stopScreenshotCapture,
