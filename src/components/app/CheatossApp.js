@@ -243,6 +243,7 @@ export class CheatossApp extends LitElement {
             if (window.require) {
                 const { ipcRenderer } = window.require('electron');
                 await ipcRenderer.invoke('close-session');
+                await ipcRenderer.invoke('cleanup-ocr');
             }
             this.sessionActive = false;
             this.currentView = 'main';
@@ -264,7 +265,7 @@ export class CheatossApp extends LitElement {
     }
 
     // Main view event handlers
-    async handleStart() {
+    async handleStart(sessionType = 'audio') {
         // check if api key is empty do nothing
         const apiKey = localStorage.getItem('apiKey')?.trim();
         if (!apiKey || apiKey === '') {
@@ -276,13 +277,63 @@ export class CheatossApp extends LitElement {
             return;
         }
 
-        await cheddar.initializeGemini(this.selectedProfile, this.selectedLanguage);
-        // Pass the screenshot interval as string (including 'manual' option)
-        cheddar.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality);
-        this.responses = [];
-        this.currentResponseIndex = -1;
-        this.startTime = Date.now();
-        this.currentView = 'assistant';
+        // Store session type for assistant view
+        this.currentSessionType = sessionType;
+
+        try {
+            if (sessionType === 'ocr') {
+                // Initialize Gemini session for OCR pipeline
+                this.setResponse({
+                    text: 'Initializing OCR session...',
+                    isUser: false,
+                    timestamp: Date.now()
+                });
+                
+                await cheddar.initializeGemini(this.selectedProfile, this.selectedLanguage);
+                
+                // Start screenshot capture with OCR
+                this.setResponse({
+                    text: 'Starting screenshot capture...',
+                    isUser: false,
+                    timestamp: Date.now()
+                });
+                
+                cheddar.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality);
+                
+                console.log('OCR session started successfully');
+            } else {
+                // Initialize original audio session
+                this.setResponse({
+                    text: 'Initializing audio session...',
+                    isUser: false,
+                    timestamp: Date.now()
+                });
+                
+                await cheddar.initializeGemini(this.selectedProfile, this.selectedLanguage);
+                
+                // Start audio capture (original functionality)
+                cheddar.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality);
+                
+                console.log('Audio session started successfully');
+            }
+            
+            // Reset response state
+            this.responses = [];
+            this.currentResponseIndex = -1;
+            this.startTime = Date.now();
+            
+            // Switch to assistant view
+            this.currentView = 'assistant';
+            
+        } catch (error) {
+            console.error('Failed to start session:', error);
+            // Show error to user
+            this.setResponse({
+                text: `Failed to start session: ${error.message}`,
+                isUser: false,
+                timestamp: Date.now()
+            });
+        }
     }
 
     async handleAPIKeyHelp() {
@@ -404,7 +455,7 @@ export class CheatossApp extends LitElement {
             case 'main':
                 return html`
                     <main-view
-                        .onStart=${() => this.handleStart()}
+                        .onStart=${(sessionType) => this.handleStart(sessionType)}
                         .onAPIKeyHelp=${() => this.handleAPIKeyHelp()}
                         .onLayoutModeChange=${layoutMode => this.handleLayoutModeChange(layoutMode)}
                     ></main-view>
@@ -445,6 +496,7 @@ export class CheatossApp extends LitElement {
                         .selectedProfile=${this.selectedProfile}
                         .onSendText=${message => this.handleSendText(message)}
                         .shouldAnimateResponse=${this.shouldAnimateResponse}
+                        .sessionType=${this.currentSessionType || 'audio'}
                         @response-index-changed=${this.handleResponseIndexChanged}
                         @response-animation-complete=${() => {
                             this.shouldAnimateResponse = false;

@@ -99,6 +99,66 @@ export class MainView extends LitElement {
             border-color: var(--start-button-border);
         }
 
+        .session-type-selector {
+            display: flex !important;
+            gap: 10px;
+            margin-bottom: 15px;
+            background: #2a2a2a;
+            padding: 5px;
+            border-radius: 8px;
+            border: 1px solid #444;
+        }
+
+        .session-type-btn {
+            flex: 1;
+            padding: 8px;
+            border: none;
+            background: transparent;
+            color: #ffffff;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.2s ease;
+        }
+
+        .session-type-btn.active {
+            background: #007acc;
+            color: #ffffff;
+        }
+
+        .session-type-btn:hover:not(.active) {
+            background: #444444;
+        }
+
+        .test-screenshot-btn {
+            background: var(--text-input-button-background);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background 0.2s ease;
+        }
+
+        .test-screenshot-btn:hover {
+            background: var(--text-input-button-hover);
+        }
+
+        .test-result {
+            margin-top: 10px;
+            padding: 8px;
+            background: var(--input-background);
+            border-radius: 6px;
+            font-size: 12px;
+            color: var(--text-color);
+            max-height: 100px;
+            overflow-y: auto;
+            border: 1px solid var(--button-border);
+        }
+
         .shortcut-icons {
             display: flex;
             align-items: center;
@@ -149,6 +209,9 @@ export class MainView extends LitElement {
         isInitializing: { type: Boolean },
         onLayoutModeChange: { type: Function },
         showApiKeyError: { type: Boolean },
+        testResult: { type: String },
+        isTestLoading: { type: Boolean },
+        sessionType: { type: String },
     };
 
     constructor() {
@@ -158,6 +221,9 @@ export class MainView extends LitElement {
         this.isInitializing = false;
         this.onLayoutModeChange = () => {};
         this.showApiKeyError = false;
+        this.testResult = '';
+        this.isTestLoading = false;
+        this.sessionType = 'audio'; // Default to audio
         this.boundKeydownHandler = this.handleKeydown.bind(this);
     }
 
@@ -184,19 +250,8 @@ export class MainView extends LitElement {
     }
 
     handleKeydown(e) {
-        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-        const isStartShortcut = isMac ? e.metaKey && e.key === 'Enter' : e.ctrlKey && e.key === 'Enter';
-
-        if (isStartShortcut) {
-            e.preventDefault();
+        if (e.key === 'Enter' && (e.ctrlKey || (navigator.platform.toUpperCase().indexOf('MAC') >= 0 && e.metaKey))) {
             this.handleStartClick();
-        }
-    }
-
-    handleInput(e) {
-        localStorage.setItem('apiKey', e.target.value);
-        // Clear error state when user starts typing
-        if (this.showApiKeyError) {
             this.showApiKeyError = false;
         }
     }
@@ -205,7 +260,12 @@ export class MainView extends LitElement {
         if (this.isInitializing) {
             return;
         }
-        this.onStart();
+        this.onStart(this.sessionType);
+    }
+
+    handleSessionTypeChange(type) {
+        this.sessionType = type;
+        this.requestUpdate();
     }
 
     handleAPIKeyHelpClick() {
@@ -233,6 +293,36 @@ export class MainView extends LitElement {
         setTimeout(() => {
             this.showApiKeyError = false;
         }, 1000);
+    }
+
+    async handleTestScreenshot() {
+        if (this.isTestLoading) return;
+        
+        // Check if cheddar is available
+        if (!window.cheddar || typeof window.cheddar.captureSingleScreenshot !== 'function') {
+            this.testResult = 'Error: Screenshot functionality not available. Please restart the app.';
+            this.requestUpdate();
+            return;
+        }
+        
+        this.isTestLoading = true;
+        this.testResult = 'Capturing screenshot...';
+        this.requestUpdate();
+
+        try {
+            const result = await window.cheddar.captureSingleScreenshot();
+            
+            if (result.success) {
+                this.testResult = `OCR Result: ${result.text.substring(0, 200)}${result.text.length > 200 ? '...' : ''}`;
+            } else {
+                this.testResult = `Error: ${result.error}`;
+            }
+        } catch (error) {
+            this.testResult = `Error: ${error.message}`;
+        } finally {
+            this.isTestLoading = false;
+            this.requestUpdate();
+        }
     }
 
     getStartButtonText() {
@@ -285,6 +375,21 @@ export class MainView extends LitElement {
         return html`
             <div class="welcome">Welcome</div>
 
+            <div class="session-type-selector">
+                <button 
+                    class="session-type-btn ${this.sessionType === 'audio' ? 'active' : ''}"
+                    @click=${() => this.handleSessionTypeChange('audio')}
+                >
+                    🎤 Audio Session
+                </button>
+                <button 
+                    class="session-type-btn ${this.sessionType === 'ocr' ? 'active' : ''}"
+                    @click=${() => this.handleSessionTypeChange('ocr')}
+                >
+                    📸 Screenshot OCR
+                </button>
+            </div>
+
             <div class="input-group">
                 <input
                     type="password"
@@ -297,9 +402,23 @@ export class MainView extends LitElement {
                     ${this.getStartButtonText()}
                 </button>
             </div>
+            
+            ${this.sessionType === 'ocr' ? html`
+                <button @click=${this.handleTestScreenshot} class="test-screenshot-btn" ?disabled=${this.isTestLoading}>
+                    ${this.isTestLoading ? 'Testing...' : 'Test Screenshot OCR'}
+                </button>
+                
+                ${this.testResult ? html`
+                    <div class="test-result">${this.testResult}</div>
+                ` : ''}
+            ` : ''}
+            
             <p class="description">
-                dont have an api key?
-                <span @click=${this.handleAPIKeyHelpClick} class="link">get one here</span>
+                ${this.sessionType === 'ocr' 
+                    ? 'Screenshot OCR app that captures screen, extracts text and sends to Gemini for AI assistance.'
+                    : 'Real-time AI assistant that provides contextual help during video calls, interviews, and meetings.'
+                }
+                <span @click=${this.handleAPIKeyHelpClick} class="link">Get API key here</span>
             </p>
         `;
     }

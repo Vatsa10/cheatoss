@@ -344,10 +344,10 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
                 systemInstruction: {
                     parts: [{ text: systemPrompt }],
                 },
-                // Low latency optimizations
+                // Minimal responses to avoid token limits
                 generationConfig: {
-                    maxOutputTokens: 150, // Shorter responses for faster delivery
-                    temperature: 0.1, // More deterministic responses
+                    maxOutputTokens: 150, // Minimal responses
+                    temperature: 0.1,
                     topP: 0.8,
                 },
             },
@@ -694,6 +694,25 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
     });
 }
 
+// Function to send OCR text to Gemini
+async function sendImageContentToGemini({ text, imageBase64 }) {
+    if (!geminiSessionRef.current) {
+        return { success: false, error: 'No active Gemini session' };
+    }
+
+    try {
+        // Send the extracted text as a message to Gemini
+        await geminiSessionRef.current.sendRealtimeInput({
+            text: `Screenshot OCR Result: ${text}`
+        });
+        
+        return { success: true };
+    } catch (error) {
+        console.error('Error sending OCR text to Gemini:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 module.exports = {
     initializeGeminiSession,
     getEnabledTools,
@@ -711,4 +730,5 @@ module.exports = {
     setupGeminiIpcHandlers,
     attemptReconnection,
     formatSpeakerResults,
+    sendImageContentToGemini, // Add the new function
 };

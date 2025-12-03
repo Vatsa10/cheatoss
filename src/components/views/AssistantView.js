@@ -289,6 +289,32 @@ export class AssistantView extends LitElement {
         .save-button svg {
             stroke: currentColor !important;
         }
+
+        .screenshot-button {
+            background: #007acc;
+            color: #ffffff;
+            border: 1px solid #005c99;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex !important;
+            align-items: center;
+            gap: 6px;
+            margin-right: 8px;
+            transition: background 0.2s ease;
+        }
+
+        .screenshot-button:hover {
+            background: #005c99;
+            border-color: #004080;
+        }
+
+        .screenshot-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
     `;
 
     static properties = {
@@ -298,6 +324,7 @@ export class AssistantView extends LitElement {
         onSendText: { type: Function },
         shouldAnimateResponse: { type: Boolean },
         savedResponses: { type: Array },
+        sessionType: { type: String },
     };
 
     constructor() {
@@ -307,10 +334,11 @@ export class AssistantView extends LitElement {
         this.selectedProfile = 'interview';
         this.onSendText = () => {};
         this._lastAnimatedWordCount = 0;
+        this.sessionType = 'audio'; // Default to audio
         // Load saved responses from localStorage
         try {
             this.savedResponses = JSON.parse(localStorage.getItem('savedResponses') || '[]');
-        } catch (e) {
+        } catch (error) {
             this.savedResponses = [];
         }
     }
@@ -503,6 +531,24 @@ export class AssistantView extends LitElement {
         }
     }
 
+    async handleScreenshot() {
+        if (!window.cheddar || typeof window.cheddar.captureSingleScreenshot !== 'function') {
+            console.error('Screenshot functionality not available');
+            return;
+        }
+
+        try {
+            const result = await window.cheddar.captureSingleScreenshot();
+            if (result.success) {
+                console.log('Screenshot captured and processed successfully');
+            } else {
+                console.error('Screenshot failed:', result.error);
+            }
+        } catch (error) {
+            console.error('Error capturing screenshot:', error);
+        }
+    }
+
     handleTextKeydown(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -613,6 +659,12 @@ export class AssistantView extends LitElement {
                 </button>
 
                 ${this.responses.length > 0 ? html` <span class="response-counter">${responseCounter}</span> ` : ''}
+
+                ${this.sessionType === 'ocr' ? html`
+                    <button class="screenshot-button" @click=${this.handleScreenshot} title="Take Screenshot">
+                        📸 CAPTURE SCREENSHOT
+                    </button>
+                ` : ''}
 
                 <button
                     class="save-button ${isSaved ? 'saved' : ''}"
