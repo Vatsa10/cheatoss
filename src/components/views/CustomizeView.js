@@ -491,6 +491,16 @@ export class CustomizeView extends LitElement {
                 name: 'Exam Assistant',
                 description: 'Academic assistance for test-taking and exam questions',
             },
+            {
+                value: 'coding',
+                name: 'Coding Interview',
+                description: 'Programming solutions and code explanations for technical interviews',
+            },
+            {
+                value: 'aptitude',
+                name: 'Aptitude Test',
+                description: 'Quantitative and logical reasoning for aptitude tests',
+            },
         ];
     }
 
@@ -537,6 +547,8 @@ export class CustomizeView extends LitElement {
             presentation: 'Presentation',
             negotiation: 'Negotiation',
             exam: 'Exam Assistant',
+            coding: 'Coding Interview',
+            aptitude: 'Aptitude Test',
         };
     }
 

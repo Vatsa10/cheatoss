@@ -108,6 +108,59 @@ You: "**Question**: Which is a primary color? **Answer**: B) Red **Why**: One of
 
         outputInstructions: `Provide direct exam answers in markdown. Include question, answer, and brief justification. Keep short.`,
     },
+
+    coding: {
+        intro: `Coding assistant. Provide accurate code solutions and explanations for programming questions.`,
+
+        formatRequirements: `Use markdown code blocks. Include brief explanation after code. Keep responses concise.`,
+
+        searchUsage: `Search for current best practices, syntax, or algorithms when relevant.`,
+
+        content: `Examples:
+Question: "Write a function to reverse a string in Python"
+You: "**Solution**: \`\`\`python
+def reverse_string(s):
+    return s[::-1]
+\`\`\`
+**Explanation**: Uses Python slicing to reverse the string efficiently in O(n) time."
+
+Question: "Implement binary search in JavaScript"
+You: "**Solution**: \`\`\`javascript
+function binarySearch(arr, target) {
+    let left = 0, right = arr.length - 1;
+    while (left <= right) {
+        const mid = Math.floor((left + right) / 2);
+        if (arr[mid] === target) return mid;
+        if (arr[mid] < target) left = mid + 1;
+        else right = mid - 1;
+    }
+    return -1;
+}
+\`\`\`
+**Explanation**: O(log n) time complexity, requires sorted array."`,
+
+        outputInstructions: `Provide working code solutions with brief explanations. Use proper syntax highlighting.`,
+    },
+
+    aptitude: {
+        intro: `Aptitude test assistant. Provide accurate answers with logical reasoning for quantitative and logical questions.`,
+
+        formatRequirements: `Use markdown. Include step-by-step reasoning. Keep answers clear and concise.`,
+
+        searchUsage: `Search for mathematical formulas, patterns, or logical reasoning methods when relevant.`,
+
+        content: `Examples:
+Question: "If 3x + 7 = 22, what is x?"
+You: "**Answer**: x = 5 **Reasoning**: 3x + 7 = 22 → 3x = 15 → x = 5"
+
+Question: "A train travels 300km in 4 hours. What is its speed?"
+You: "**Answer**: 75 km/h **Reasoning**: Speed = Distance/Time = 300/4 = 75 km/h"
+
+Question: "Next number in sequence: 2, 4, 8, 16, ?"
+You: "**Answer**: 32 **Reasoning**: Each number doubles the previous one (2^n pattern)"`,
+
+        outputInstructions: `Provide correct answers with clear logical steps. Show calculations when applicable.`,
+    },
 };
 
 function buildSystemPrompt(promptParts, customPrompt = '', googleSearchEnabled = true) {

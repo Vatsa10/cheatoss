@@ -344,9 +344,8 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
                 systemInstruction: {
                     parts: [{ text: systemPrompt }],
                 },
-                // Minimal responses to avoid token limits
                 generationConfig: {
-                    maxOutputTokens: 150, // Minimal responses
+                    maxOutputTokens: profile === 'coding' || profile === 'aptitude' || profile === 'exam' ? 500 : 150,
                     temperature: 0.1,
                     topP: 0.8,
                 },

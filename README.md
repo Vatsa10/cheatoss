@@ -7,7 +7,7 @@ A real-time AI assistant that provides contextual help during video calls, inter
 - **Screen & Audio Capture**: Analyzes what you see and hear for contextual responses
 - **OCR Screenshot Capture**: Select any screen area for real-time text extraction and AI analysis
 - **Multiple Session Types**: Audio session for live conversation, OCR session for screenshot-based analysis
-- **Multiple Profiles**: Interview, Sales Call, Business Meeting, Presentation, Negotiation
+- **Multiple Profiles**: Interview, Sales Call, Business Meeting, Presentation, Negotiation, Coding Interview, Aptitude Test, Exam Assistant
 - **Transparent Overlay**: Always-on-top window that can be positioned anywhere
 - **Click-through Mode**: Make window transparent to clicks when needed
 - **Cross-platform**: Works on macOS, Windows, and Linux (experimental)
